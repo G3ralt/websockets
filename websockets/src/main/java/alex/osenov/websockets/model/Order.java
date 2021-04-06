@@ -10,17 +10,23 @@ public class Order {
     }
 
     private final Pair pair;
+    private final int count;
     private final BigDecimal price;
     private final BigDecimal amount;
 
-    public Order(Pair pair, BigDecimal price, BigDecimal amount) {
+    public Order(Pair pair, int count, BigDecimal price, BigDecimal amount) {
         this.pair = pair;
+        this.count = count;
         this.price = price;
         this.amount = amount;
     }
 
     public Pair getPair() {
         return pair;
+    }
+
+    public int getCount() {
+        return count;
     }
 
     public BigDecimal getPrice() {
@@ -33,6 +39,6 @@ public class Order {
 
     @Override
     public String toString() {
-        return "[" + price.doubleValue() + ", " + amount.doubleValue() + "]";
+        return "[" + price.doubleValue() + ", " + amount.toPlainString()+ "]";
     }
 }

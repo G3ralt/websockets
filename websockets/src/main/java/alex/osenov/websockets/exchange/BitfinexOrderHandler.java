@@ -5,21 +5,22 @@ import alex.osenov.websockets.model.Order;
 import com.google.gson.Gson;
 import com.google.gson.JsonArray;
 import com.google.gson.JsonElement;
+import org.springframework.stereotype.Service;
 import org.springframework.web.reactive.socket.WebSocketHandler;
 import org.springframework.web.reactive.socket.WebSocketMessage;
 import org.springframework.web.reactive.socket.WebSocketSession;
 import reactor.core.publisher.Mono;
 
 import java.math.BigDecimal;
-import java.util.Map;
+import java.util.ArrayList;
+import java.util.List;
 
+@Service
 public class BitfinexOrderHandler implements WebSocketHandler {
 
-    private final Map<Order.Pair, Map<Double, Order>> orders;
     private final Gson gson;
 
-    public BitfinexOrderHandler(Map<Order.Pair, Map<Double, Order>> orders) {
-        this.orders = orders;
+    public BitfinexOrderHandler() {
         this.gson = new Gson();
     }
 
@@ -31,57 +32,29 @@ public class BitfinexOrderHandler implements WebSocketHandler {
                 .and(session.receive()
                         .map(WebSocketMessage::getPayloadAsText)
                         .filter(s -> s.contains("["))
-                        .map(s -> gson.fromJson(s, JsonArray.class))
-                        .doOnNext(array -> processJson(array)))
-                .then();
+                        .map(s -> gson.fromJson(s, JsonArray.class).get(1).getAsJsonArray())
+                        .map(jsonElement -> processJson(jsonElement))
+                        .doOnNext(OrderBook::updateBook)
+                );
     }
 
-    private void processJson(JsonArray jsonElements) {
-        JsonElement jsonElement = jsonElements.get(1);
-        if (jsonElement.isJsonArray()) {
-            JsonArray data = (JsonArray) jsonElement;
-            if (data.size() > 3) {
-                for (JsonElement element : data) {
-                    processOrder((JsonArray) element);
-                }
-            } else {
-                processOrder(data);
+    private List<Order> processJson(JsonArray jsonArray) {
+        if (jsonArray.size() > 3) {
+            List<Order> orders = new ArrayList<>();
+            for (JsonElement element : jsonArray) {
+                orders.add(orderFromJson(element.getAsJsonArray()));
             }
-        }
-    }
-
-    private void processOrder(JsonArray data) {
-        double price = data.get(0).getAsDouble();
-        int count = data.get(1).getAsInt();
-        double amount = data.get(2).getAsDouble();
-
-        if (count > 0) {
-            if (amount > 0) {
-                addNewOrder(price, amount, Order.Pair.BTC_USD_BID);
-            } else {
-                addNewOrder(price, amount, Order.Pair.BTC_USD_ASK);
-            }
+            return orders;
         } else {
-            if (amount > 0) {
-                orders.get(Order.Pair.BTC_USD_BID).remove(price);
-            } else {
-                orders.get(Order.Pair.BTC_USD_ASK).remove(price);
-            }
-        }
-        System.out.println(orders);
-    }
-
-    private void addNewOrder(double price, double amount, Order.Pair pair) {
-        Map<Double, Order> orderMap = this.orders.get(pair);
-        Order fromMap = orderMap.get(price);
-        BigDecimal newOrderAmount = BigDecimal.valueOf(amount).setScale(8);
-        BigDecimal bigDecimalPrice = BigDecimal.valueOf(price).setScale(8);
-        if (fromMap == null) {
-            orderMap.put(price, new Order(pair, bigDecimalPrice, newOrderAmount));
-        } else {
-            BigDecimal sum = fromMap.getAmount().add(newOrderAmount).setScale(8);
-            orderMap.put(price, new Order(pair, bigDecimalPrice, sum));
+            return List.of(orderFromJson(jsonArray));
         }
     }
 
+    private Order orderFromJson(JsonArray jsonElement) {
+        double price = jsonElement.get(0).getAsDouble();
+        int count = jsonElement.get(1).getAsInt();
+        double amount = jsonElement.get(2).getAsDouble();
+        Order.Pair pair = amount > 0 ? Order.Pair.BTC_USD_BID : Order.Pair.BTC_USD_ASK;
+        return new Order(pair, count, BigDecimal.valueOf(price).setScale(8), BigDecimal.valueOf(amount).setScale(8).abs());
+    }
 }

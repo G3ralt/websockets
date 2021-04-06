@@ -1,21 +1,27 @@
 package alex.osenov.websockets.exchange;
 
-import alex.osenov.websockets.model.Order;
+import org.springframework.web.reactive.socket.WebSocketHandler;
+import org.springframework.web.reactive.socket.client.ReactorNettyWebSocketClient;
+import org.springframework.web.reactive.socket.client.WebSocketClient;
 
-import java.util.HashMap;
-import java.util.Map;
+import java.net.URI;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
 
 public abstract class Exchange {
 
-    private final Map<Order.Pair, Map<Double, Order>> orders;
+    private final ExecutorService executorService;
 
     public Exchange() {
-        this.orders = Map.of(Order.Pair.BTC_USD_BID, new HashMap<>(), Order.Pair.BTC_USD_ASK, new HashMap<>());
+        executorService = Executors.newCachedThreadPool();
     }
 
-    public Map<Order.Pair, Map<Double, Order>> getOrders() {
-        return orders;
+    public void connectOrderBookStream(String endPoint, WebSocketHandler handler) {
+        this.executorService.submit(() -> {
+            WebSocketClient client = new ReactorNettyWebSocketClient();
+            client.execute(URI.create(endPoint), handler)
+                    .block();
+        });
     }
-
 
 }
